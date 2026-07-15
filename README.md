@@ -35,6 +35,7 @@ AI 驱动的简历优化工具 —— 输入项目经历，自动输出 STAR 法
 | **PRD 导出** | 基于项目经历自动生成标准化产品需求文档 |
 | **效果评估** | 三维度打分卡片 + 历史趋势折线图 + CSV 导出 |
 | **用户调研** | 问卷录入 / NPS 评分 / 痛点汇总报告 |
+| **数据看板** | 访问量 / 优化次数 / 评分均值 / LLM 调用统计，数据文件持久化 |
 
 ---
 
@@ -70,23 +71,30 @@ streamlit run resume_optimizer.py
 ## 🧱 项目架构
 
 ```
-resume_optimizer.py          ← 主入口：页面路由 + CSS + 侧边栏（~200行）
+resume_optimizer.py          ← 主入口：页面路由 + CSS + 侧边栏（~430行）
     │
     ├── config.py            ← 全局配置中心（路径/密钥/模型参数/chunk策略）
     ├── llm_client.py        ← LLM 抽象层（DeepSeek / Ollama / 通义千问 一键切换）
     ├── rag_core.py          ← RAG 核心（双 Embedding + 多路召回 + 重排序）
     │
-    ├── ui/                  ← 四个 Tab 独立页面
+    ├── ui/                  ← 五个 Tab 独立页面
     │   ├── tab_resume.py    ← Tab1：简历优化
     │   ├── tab_prd.py       ← Tab2：PRD 文档生成
     │   ├── tab_eval.py      ← Tab3：质量评估 + 趋势图
-    │   └── tab_survey.py    ← Tab4：用户调研
+    │   ├── tab_survey.py    ← Tab4：用户调研
+    │   └── tab_stats.py     ← Tab5：数据看板（访问/优化/LLM 统计）
     │
-    └── utils/               ← 工具模块
-        ├── logger.py        ← 本地日志（按天轮转，堆栈追踪）
-        ├── file_utils.py    ← 多编码兼容 + PDF/DOCX 解析
-        ├── export_utils.py  ← Markdown / Word 导出
-        └── evaluation.py    ← 三维评分 + JSON 容错解析
+    ├── utils/               ← 工具模块
+    │   ├── logger.py        ← 本地日志（按天轮转，堆栈追踪）
+    │   ├── file_utils.py    ← 多编码兼容 + PDF/DOCX 解析
+    │   ├── export_utils.py  ← Markdown / Word 导出
+    │   ├── evaluation.py    ← 三维评分 + JSON 容错解析
+    │   ├── stats.py         ← 统计数据持久化（访问/优化/LLM 调用）
+    │   └── migrate_logs.py  ← 一次性脚本：历史日志 → JSON 数据
+    │
+    └── docs/                ← 设计文档
+        ├── coze-agent-design.md      ← Coze Agent 设计方案 + 搭建指南
+        └── figma-learning-roadmap.md ← Figma 学习路线 + 原型规格
 ```
 
 **设计原则**：主文件只做路由，不堆业务逻辑。每个模块职责单一、可独立测试。
@@ -170,6 +178,8 @@ class QwenClient(AbstractLLMClient)      # 阿里云
 | `.gitignore` | 屏蔽密钥/数据库/临时文件 |
 | `deploy.ps1` | Windows 一键部署脚本 |
 | `requirements_resume.txt` | Python 依赖清单 |
+| `docs/coze-agent-design.md` | Coze Agent「AI 求职策略顾问」设计方案 |
+| `docs/figma-learning-roadmap.md` | Figma 学习路线 + 3 页原型规格 |
 
 ---
 
