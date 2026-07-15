@@ -31,7 +31,8 @@ from rag_core import (
 )
 from llm_client import reset_llm_client
 from utils.logger import get_logger, log_info
-from ui import tab_resume, tab_prd, tab_eval, tab_survey
+from utils.stats import log_visit, get_optimization_stats
+from ui import tab_resume, tab_prd, tab_eval, tab_survey, tab_stats
 
 # ══════════════════════════════════════════════════════════════
 # 初始化日志
@@ -194,6 +195,8 @@ for key, default in _defaults.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
+# ── 记录本次访问（持久化统计）──
+log_visit()
 
 # ══════════════════════════════════════════════════════════════
 # 侧边栏：设置 + 知识库管理
@@ -373,9 +376,13 @@ with st.sidebar:
 
     st.divider()
 
-    # 优化记录
-    if st.session_state.history:
-        st.markdown(f"**📊 已优化：{len(st.session_state.history)} 条**")
+    # 优化记录（session + 持久化双数据源）
+    opt_stats = get_optimization_stats()
+    total_opts = max(len(st.session_state.history), opt_stats.get("total_count", 0))
+    if total_opts > 0:
+        st.markdown(f"**📊 已优化：{total_opts} 条**")
+        if opt_stats.get("avg_score_all"):
+            st.caption(f"平均评分：⭐{opt_stats['avg_score_all']}/5.0")
 
     if st.button("🔄 清空历史记录", use_container_width=True):
         st.session_state.history = []
@@ -388,11 +395,12 @@ with st.sidebar:
 # 主界面 - 使用 Tabs 组织功能模块
 # ══════════════════════════════════════════════════════════════
 
-tab_main, tab_prd_ui, tab_eval_ui, tab_survey_ui = st.tabs([
+tab_main, tab_prd_ui, tab_eval_ui, tab_survey_ui, tab_stats_ui = st.tabs([
     "📄 简历优化",
     "📋 PRD 导出",
     "📊 效果评估",
     "📝 用户调研",
+    "📈 数据看板",
 ])
 
 # Tab 1：简历优化
@@ -410,6 +418,10 @@ with tab_eval_ui:
 # Tab 4：用户调研
 with tab_survey_ui:
     tab_survey.render()
+
+# Tab 5：数据看板
+with tab_stats_ui:
+    tab_stats.render()
 
 
 # ══════════════════════════════════════════════════════════════

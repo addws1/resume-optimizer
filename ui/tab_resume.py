@@ -16,6 +16,7 @@ from rag_core import search_knowledge_base, get_kb_stats
 from llm_client import get_llm_client
 from utils.evaluation import evaluate_optimization, render_evaluation_scores
 from utils.logger import log_error, log_info
+from utils.stats import persist_optimization
 
 
 # ══════════════════════════════════════════════════════════════
@@ -288,6 +289,9 @@ def render():
                 st.session_state.result = parsed
                 st.session_state.eval_scores = eval_scores
 
+                # 持久化到磁盘（跨会话保留）
+                persist_optimization(record)
+
                 status.update(label="✅ 优化完成！", state="complete")
                 log_info("简历优化完成")
 
@@ -329,3 +333,33 @@ def render():
                            + float(scores.get("format_quality", 0))) / 3
                     score_tag = f" ⭐{avg:.1f}"
                 st.markdown(f"**{idx}.** {preview} `{role_tag}`{rag_tag}{score_tag}")
+
+    # ── 优化效果对比（基于历史评分数据）──
+    scored_history = [h for h in history if h.get("eval_scores")]
+    if len(scored_history) >= 2:
+        with st.expander("📊 优化效果对比", expanded=False):
+            st.caption("对比最近优化在三个维度上的平均表现")
+
+            def _avg_of_key(key):
+                vals = [float(s["eval_scores"].get(key, 0)) for s in scored_history[-5:]]
+                return sum(vals) / len(vals) if vals else 0
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("完整性", f"{_avg_of_key('completeness'):.1f}", delta=None)
+            with col2:
+                st.metric("岗位匹配度", f"{_avg_of_key('job_match'):.1f}", delta=None)
+            with col3:
+                st.metric("格式规范度", f"{_avg_of_key('format_quality'):.1f}", delta=None)
+            with col4:
+                overall = (_avg_of_key("completeness") + _avg_of_key("job_match") + _avg_of_key("format_quality")) / 3
+                st.metric("综合均分", f"{overall:.1f} / 5.0", delta=None)
+
+            # 最近一次评分明细
+            latest_scores = scored_history[-1]["eval_scores"]
+            st.caption(
+                f"最近一次优化评分 — "
+                f"完整性 {float(latest_scores.get('completeness', 0)):.1f} | "
+                f"匹配度 {float(latest_scores.get('job_match', 0)):.1f} | "
+                f"规范度 {float(latest_scores.get('format_quality', 0)):.1f}"
+            )
