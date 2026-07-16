@@ -33,7 +33,23 @@ for _d in (CHROMA_DIR, DATA_DIR, LOG_DIR):
 # ══════════════════════════════════════════════════════════════
 # API / LLM 配置
 # ══════════════════════════════════════════════════════════════
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+
+def _get_secret(name: str, default: str = "") -> str:
+    """
+    读取密钥/配置：优先环境变量（本地 .env），
+    读不到再尝试 st.secrets（Streamlit Cloud 的 Secrets 不一定注入环境变量）。
+    """
+    val = os.getenv(name, "")
+    if val:
+        return val
+    try:
+        import streamlit as st
+        return str(st.secrets.get(name, default))
+    except Exception:
+        return default
+
+
+DEEPSEEK_API_KEY = _get_secret("DEEPSEEK_API_KEY")
 HF_ENDPOINT = os.getenv("HF_ENDPOINT", "https://hf-mirror.com")
 
 # LLM 提供商选择：deepseek | ollama | qwen
@@ -52,7 +68,7 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 # 通义千问配置（阿里云）
 QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 QWEN_MODEL = "qwen-plus"
-QWEN_API_KEY = os.getenv("QWEN_API_KEY", "")
+QWEN_API_KEY = _get_secret("QWEN_API_KEY")
 
 # 通用 LLM 参数
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
