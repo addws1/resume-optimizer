@@ -168,7 +168,7 @@ class QwenClient(AbstractLLMClient)      # 阿里云
 ```
 
 关键工程细节：
-- **用户识别**：客户端 IP 做 sha256 哈希后持久化计数（不存明文 IP），无登录系统也能跨会话限流
+- **用户识别**：客户端 IP 做 sha256 哈希后持久化计数（不存明文 IP），无登录系统也能跨会话限流；本地 localhost 直连时回退到 Host 头稳定标识
 - **防跨会话密钥泄漏**：LLM 客户端全局单例是进程级共享的，用户自带 Key 时绕过单例、每次新建会话独立实例——否则 A 用户的 Key 会被 B 用户静默使用
 - **失败不扣费**：额度在 LLM 调用成功后才扣减，网络错误 / 无效 Key 不烧用户额度
 - **密钥安全**：BYOK Key 仅存于会话内存（session_state），永不写盘、不写日志
@@ -196,6 +196,7 @@ class QwenClient(AbstractLLMClient)      # 阿里云
 |------|------|
 | `.env` | API Key 配置（已 gitignore，不提交） |
 | `.gitignore` | 屏蔽密钥/数据库/临时文件 |
+| `.streamlit/config.toml` | 深色主题配置（让原生组件文字在深色背景下清晰渲染） |
 | `deploy.ps1` | Windows 一键部署脚本 |
 | `requirements_resume.txt` | Python 依赖清单 |
 | `docs/coze-agent-design.md` | Coze Agent「AI 求职策略顾问」设计方案 |
