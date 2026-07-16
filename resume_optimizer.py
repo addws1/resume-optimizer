@@ -152,6 +152,16 @@ st.markdown(
         border: none; border-top: 1px solid #30363d;
         margin: 20px 0;
     }
+
+    /* 提示文字增亮（caption / placeholder / 帮助说明，深色背景下默认太暗） */
+    [data-testid="stCaptionContainer"],
+    [data-testid="stCaptionContainer"] p,
+    [data-testid="stWidgetLabelHelp"] {
+        color: #9da7b3 !important;
+    }
+    input::placeholder, textarea::placeholder {
+        color: #7d8590 !important; opacity: 1 !important;
+    }
 </style>
 """,
     unsafe_allow_html=True,

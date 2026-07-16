@@ -1,0 +1,12 @@
+# Streamlit 主题配置
+# 与 resume_optimizer.py 中的 GitHub Dark 风格 CSS 保持一致。
+# 关键作用：让 Streamlit 知道当前是深色主题，
+# 原生组件（caption/输入框/下拉框/帮助气泡）才会用浅色文字渲染，
+# 否则会出现"深灰文字叠深色背景"看不清的问题。
+
+[theme]
+base = "dark"
+primaryColor = "#2ea043"
+backgroundColor = "#0d1117"
+secondaryBackgroundColor = "#161b22"
+textColor = "#c9d1d9"
