@@ -5,7 +5,7 @@ AI 驱动的简历优化工具 —— 输入项目经历，自动输出 STAR 法
 **面向求职作品集展示** · 适合 AI 产品实习生 / Python 后端岗位投递。
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red)](https://streamlit.io/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.37+-red)](https://streamlit.io/)
 [![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-green)](https://platform.deepseek.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
@@ -35,7 +35,8 @@ AI 驱动的简历优化工具 —— 输入项目经历，自动输出 STAR 法
 | **PRD 导出** | 基于项目经历自动生成标准化产品需求文档 |
 | **效果评估** | 三维度打分卡片 + 历史趋势折线图 + CSV 导出 |
 | **用户调研** | 问卷录入 / NPS 评分 / 痛点汇总报告 |
-| **数据看板** | 访问量 / 优化次数 / 评分均值 / LLM 调用统计，数据文件持久化 |
+| **数据看板** | 访问量 / 优化次数 / 评分均值 / LLM 调用统计 / 独立用户数，数据文件持久化 |
+| **免费额度 + BYOK** | 每用户每功能免费 3 次；超出后可填入自己的 API Key 无限使用（本地 Ollama 不限） |
 
 ---
 
@@ -90,6 +91,7 @@ resume_optimizer.py          ← 主入口：页面路由 + CSS + 侧边栏（~4
     │   ├── export_utils.py  ← Markdown / Word 导出
     │   ├── evaluation.py    ← 三维评分 + JSON 容错解析
     │   ├── stats.py         ← 统计数据持久化（访问/优化/LLM 调用）
+    │   ├── quota.py         ← 免费额度 + BYOK（IP 哈希识别用户，额度门禁与扣费）
     │   └── migrate_logs.py  ← 一次性脚本：历史日志 → JSON 数据
     │
     └── docs/                ← 设计文档
@@ -153,6 +155,24 @@ class QwenClient(AbstractLLMClient)      # 阿里云
 
 侧边栏一键切换，切换后自动清除向量库缓存。
 
+### 五、免费额度 + BYOK（公开部署的成本防护）
+
+公开部署后所有 LLM 调用都消耗开发者的 API 额度，存在被刷爆的风险。设计：
+
+```
+用户点击功能按钮
+  ├── 本地 Ollama？        → 豁免（不花开发者的钱）
+  ├── 填了自己的 Key？      → 豁免（BYOK，走用户自己的账单）
+  ├── 免费额度还有剩余？    → 放行，调用成功后扣 1 次
+  └── 都不满足             → 拦截，引导填入自己的 API Key
+```
+
+关键工程细节：
+- **用户识别**：客户端 IP 做 sha256 哈希后持久化计数（不存明文 IP），无登录系统也能跨会话限流
+- **防跨会话密钥泄漏**：LLM 客户端全局单例是进程级共享的，用户自带 Key 时绕过单例、每次新建会话独立实例——否则 A 用户的 Key 会被 B 用户静默使用
+- **失败不扣费**：额度在 LLM 调用成功后才扣减，网络错误 / 无效 Key 不烧用户额度
+- **密钥安全**：BYOK Key 仅存于会话内存（session_state），永不写盘、不写日志
+
 ---
 
 ## 🛠 技术栈
@@ -187,6 +207,8 @@ class QwenClient(AbstractLLMClient)      # 阿里云
 
 - **所有数据本地存储**：向量库（chroma_db/）、调研记录（data/）、日志（data/logs/）
 - **API Key 保护**：.env 文件已加入 .gitignore，不会被提交到 Git
+- **用户自带 Key（BYOK）不落盘**：仅存会话内存，刷新即失效，不写日志
+- **用户识别匿名化**：额度统计只存 IP 的 sha256 哈希，不保存明文 IP
 - **不上传云端**：除 LLM API 调用外，无任何数据外发
 
 ---
