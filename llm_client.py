@@ -384,3 +384,17 @@ def reset_llm_client():
     """重置 LLM 客户端缓存（切换 provider 后使用）"""
     global _llm_client
     _llm_client = None
+
+
+def is_ollama_available(timeout: float = 1.5) -> bool:
+    """
+    探测本地 Ollama 服务是否可达（用于侧边栏提示）。
+    注意：Ollama 跑在运行本应用的机器上，云端部署时恒为不可达。
+    """
+    import urllib.request
+    base = OLLAMA_BASE_URL.rsplit("/v1", 1)[0]
+    try:
+        with urllib.request.urlopen(base + "/api/tags", timeout=timeout):
+            return True
+    except Exception:
+        return False

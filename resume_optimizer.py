@@ -245,8 +245,25 @@ with st.sidebar:
             st.caption("在项目 .env 文件中设置：")
             st.code('DEEPSEEK_API_KEY="sk-xxx"', language="bash")
     elif selected_provider == "ollama":
-        st.info("ℹ️ 使用本地 Ollama，无需 API Key")
-        st.caption("确保 Ollama 服务已启动：`ollama serve`")
+        # 探测本地 Ollama 服务（缓存 30 秒，避免每次交互都探测）
+        @st.cache_data(ttl=30, show_spinner=False)
+        def _ollama_reachable() -> bool:
+            from llm_client import is_ollama_available
+            return is_ollama_available()
+
+        if _ollama_reachable():
+            st.success("✓ 本地 Ollama 服务运行中，免费不限次数")
+            from config import OLLAMA_MODEL
+            st.caption(f"当前模型：`{OLLAMA_MODEL}`")
+        else:
+            st.warning(
+                "⚠️ 未检测到本地 Ollama 服务。此选项仅在**本机运行应用**且已安装 "
+                "Ollama 时可用；线上用户请使用 DeepSeek / Qwen，或填入自己的 API Key。"
+            )
+            st.caption(
+                "本机安装：https://ollama.com/download 下载后执行 "
+                "`ollama pull qwen2.5:7b`"
+            )
     elif selected_provider == "qwen":
         from config import QWEN_API_KEY
         if QWEN_API_KEY:
