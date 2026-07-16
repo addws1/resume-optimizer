@@ -10,7 +10,7 @@ from datetime import datetime
 
 import streamlit as st
 
-from llm_client import get_llm_client
+from utils.quota import check_quota, consume_quota, get_session_llm_client
 from utils.logger import log_error, log_info
 
 
@@ -100,23 +100,32 @@ def render():
             if not prd_experience.strip():
                 st.error("⚠️ 请先输入项目经历或产品想法。")
             else:
-                st.session_state._prd_generating = True
-                st.rerun()
+                allowed, quota_msg = check_quota("prd")
+                if not allowed:
+                    st.error(f"🚫 {quota_msg}")
+                else:
+                    st.session_state._prd_generating = True
+                    st.rerun()
 
     # ── 执行生成 ──
     if st.session_state.get("_prd_generating"):
         with st.spinner("🤖 AI 正在生成 PRD 文档…"):
             try:
-                llm_client = get_llm_client()
+                llm_client = get_session_llm_client()
                 prompt = build_prd_prompt(
                     prd_experience, prd_role or "", prd_company or ""
                 )
                 prd_content = llm_client.generate(prompt, max_tokens=4096)
+                # 生成成功即扣一次免费额度（失败不扣，BYOK/ollama 内部豁免）
+                consume_quota("prd")
                 st.session_state.prd_content = prd_content
                 st.session_state.prd_generated = True
                 log_info("PRD 生成完成")
             except Exception as e:
-                st.error(f"❌ PRD 生成失败: {e}")
+                err_text = str(e)
+                if "401" in err_text or "invalid_api_key" in err_text.lower():
+                    err_text += "（请检查侧边栏填入的 API Key 是否正确）"
+                st.error(f"❌ PRD 生成失败: {err_text}")
                 log_error("tab_prd", e, "PRD 生成失败")
             finally:
                 st.session_state._prd_generating = False

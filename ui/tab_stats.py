@@ -40,6 +40,18 @@ def render():
     with col5:
         st.metric("RAG 使用率", f"{opts['rag_usage_rate']}%")
 
+    # 免费额度使用概览
+    from utils.quota import get_quota_stats
+    quota = get_quota_stats()
+    if quota["total_users"] > 0:
+        qcol1, qcol2, qcol3 = st.columns(3)
+        with qcol1:
+            st.metric("独立用户数", quota["total_users"])
+        with qcol2:
+            st.metric("简历优化·免费使用", quota["total_resume"])
+        with qcol3:
+            st.metric("PRD 生成·免费使用", quota["total_prd"])
+
     st.divider()
 
     # ════════════════════════════════════════════════════════════

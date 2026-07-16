@@ -13,7 +13,7 @@ import streamlit as st
 
 from config import TOP_K_RETRIEVAL
 from rag_core import search_knowledge_base, get_kb_stats
-from llm_client import get_llm_client
+from utils.quota import check_quota, consume_quota, get_session_llm_client
 from utils.evaluation import evaluate_optimization, render_evaluation_scores
 from utils.logger import log_error, log_info
 from utils.stats import persist_optimization
@@ -238,16 +238,20 @@ def render():
         if not experience.strip():
             st.error("⚠️ 请先输入项目经历再优化。")
         else:
-            try:
-                llm_client = get_llm_client()
-                st.session_state.optimizing = True
-            except ValueError as e:
-                st.error(f"⚠️ {e}")
+            allowed, quota_msg = check_quota("resume")
+            if not allowed:
+                st.error(f"🚫 {quota_msg}")
+            else:
+                try:
+                    llm_client = get_session_llm_client()
+                    st.session_state.optimizing = True
+                except ValueError as e:
+                    st.error(f"⚠️ {e}")
 
     if st.session_state.get("optimizing"):
         with st.status("🤖 AI 正在优化你的简历…", expanded=True) as status:
             try:
-                llm_client = get_llm_client()
+                llm_client = get_session_llm_client()
 
                 # Step 1: RAG 检索
                 kb_context = ""
@@ -264,6 +268,9 @@ def render():
                     experience, target_role or "", target_company or "", kb_context
                 )
                 raw = llm_client.generate(prompt, max_tokens=4096)
+                # 主调用成功即扣一次免费额度（一次点击含优化+评估 2 次 LLM 调用，只计 1 次；
+                # 调用失败不扣费，BYOK/ollama 场景在 consume_quota 内部豁免）
+                consume_quota("resume")
                 parsed = parse_result(raw)
 
                 # Step 3: 效果评估
@@ -296,7 +303,10 @@ def render():
                 log_info("简历优化完成")
 
             except Exception as e:
-                status.update(label=f"❌ 出错: {e}", state="error")
+                err_text = str(e)
+                if "401" in err_text or "invalid_api_key" in err_text.lower():
+                    err_text += "（请检查侧边栏填入的 API Key 是否正确）"
+                status.update(label=f"❌ 出错: {err_text}", state="error")
                 st.session_state.result = None
                 st.session_state.eval_scores = None
                 log_error("tab_resume", e, "优化流程失败")

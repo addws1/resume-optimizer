@@ -243,6 +243,35 @@ with st.sidebar:
         else:
             st.warning("⚠️ 未设置 QWEN_API_KEY")
 
+    # ── 免费额度 / BYOK ──
+    from utils.quota import (
+        get_user_id, get_remaining, get_byok_key, is_quota_exempt,
+    )
+    from config import FREE_QUOTA_PER_FEATURE
+
+    if selected_provider != "ollama":
+        st.text_input(
+            "🔐 使用自己的 API Key（可选）",
+            type="password",
+            key=f"byok_{selected_provider}",
+            help="填写后不消耗免费额度、不限次数；仅保存在当前会话内存中，"
+                 "刷新页面即失效，永不写入服务器磁盘或日志。",
+        )
+
+    if is_quota_exempt():
+        if selected_provider != "ollama" and get_byok_key(selected_provider):
+            st.success("✓ 已使用您自己的 Key，不限次数")
+    else:
+        _uid = get_user_id()
+        _remain_resume = get_remaining(_uid, "resume")
+        _remain_prd = get_remaining(_uid, "prd")
+        st.caption(
+            f"🎫 免费额度 — 简历优化：剩 {_remain_resume}/{FREE_QUOTA_PER_FEATURE} 次 · "
+            f"PRD 生成：剩 {_remain_prd}/{FREE_QUOTA_PER_FEATURE} 次"
+        )
+        if _remain_resume == 0 or _remain_prd == 0:
+            st.warning("部分功能免费额度已用完，填入自己的 API Key 可继续使用")
+
     st.divider()
 
     # ── Embedding 后端选择 ──

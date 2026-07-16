@@ -83,13 +83,15 @@ class AbstractLLMClient(ABC):
 class DeepSeekClient(AbstractLLMClient):
     """DeepSeek API 客户端（通过 OpenAI SDK）"""
 
-    def __init__(self):
-        if not DEEPSEEK_API_KEY:
+    def __init__(self, api_key: str = ""):
+        # 优先使用调用方传入的 key（BYOK），回退到 .env 配置
+        key = api_key or DEEPSEEK_API_KEY
+        if not key:
             raise ValueError(
                 "未找到 DEEPSEEK_API_KEY。请在 .env 文件中设置或配置系统环境变量。"
             )
         self._client = OpenAI(
-            api_key=DEEPSEEK_API_KEY,
+            api_key=key,
             base_url=DEEPSEEK_BASE_URL,
         )
 
@@ -237,13 +239,15 @@ class OllamaClient(AbstractLLMClient):
 class QwenClient(AbstractLLMClient):
     """通义千问 API 客户端（阿里云 DashScope 兼容接口）"""
 
-    def __init__(self):
-        if not QWEN_API_KEY:
+    def __init__(self, api_key: str = ""):
+        # 优先使用调用方传入的 key（BYOK），回退到 .env 配置
+        key = api_key or QWEN_API_KEY
+        if not key:
             raise ValueError(
                 "未找到 QWEN_API_KEY。请在 .env 文件中设置或配置系统环境变量。"
             )
         self._client = OpenAI(
-            api_key=QWEN_API_KEY,
+            api_key=key,
             base_url=QWEN_BASE_URL,
         )
 
@@ -316,9 +320,9 @@ class QwenClient(AbstractLLMClient):
 _llm_client: Optional[AbstractLLMClient] = None
 
 
-def get_llm_client(provider: str = "") -> AbstractLLMClient:
+def get_llm_client(provider: str = "", api_key: str = "") -> AbstractLLMClient:
     """
-    获取 LLM 客户端实例（单例模式）。
+    获取 LLM 客户端实例。
 
     根据 LLM_PROVIDER 配置自动选择后端：
     - "deepseek" → DeepSeekClient
@@ -327,6 +331,9 @@ def get_llm_client(provider: str = "") -> AbstractLLMClient:
 
     Args:
         provider: 可选，手动指定后端名称（覆盖配置文件）
+        api_key: 可选，用户自带的 API Key（BYOK）。
+                 传入时【绕过全局单例】每次新建实例——单例是进程级共享，
+                 若缓存用户 key 会泄漏给其他会话。
 
     Returns:
         AbstractLLMClient 实例
@@ -336,12 +343,26 @@ def get_llm_client(provider: str = "") -> AbstractLLMClient:
     """
     global _llm_client
 
+    from config import LLM_PROVIDER
+    target = provider or LLM_PROVIDER
+
+    # BYOK：不读不写单例，直接构造会话独立实例
+    if api_key:
+        if target == "deepseek":
+            return DeepSeekClient(api_key=api_key)
+        elif target == "ollama":
+            return OllamaClient()
+        elif target == "qwen":
+            return QwenClient(api_key=api_key)
+        else:
+            raise ValueError(
+                f"不支持的 LLM 提供商：{target}。"
+                f"可用选项：deepseek / ollama / qwen。"
+            )
+
     # 如果已缓存且 provider 不变，直接返回
     if _llm_client is not None and (not provider or provider == _llm_client.provider_name):
         return _llm_client
-
-    from config import LLM_PROVIDER
-    target = provider or LLM_PROVIDER
 
     if target == "deepseek":
         _llm_client = DeepSeekClient()

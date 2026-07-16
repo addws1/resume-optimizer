@@ -59,6 +59,12 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4096"))
 
 # ══════════════════════════════════════════════════════════════
+# 免费额度 / BYOK 配置
+# ══════════════════════════════════════════════════════════════
+FREE_QUOTA_PER_FEATURE = int(os.getenv("FREE_QUOTA_PER_FEATURE", "3"))  # 每功能免费次数
+QUOTA_FILE = DATA_DIR / "usage_quotas.json"                             # 额度持久化文件
+
+# ══════════════════════════════════════════════════════════════
 # RAG / 向量库配置
 # ══════════════════════════════════════════════════════════════
 
