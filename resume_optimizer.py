@@ -290,16 +290,15 @@ with st.sidebar:
     # 如果用户切换了向量后端，清除向量库缓存
     # 注意：不能与 config.EMBEDDING_BACKEND 比较（import 时定死，会无限 rerun）；
     # 会话级选择由 rag_core 读取 session_state["sidebar_emb_backend"] 生效
-    if st.session_state.get("_last_emb_backend") != selected_emb:
-        st.session_state["_last_emb_backend"] = selected_emb
-        from rag_core import reset_vector_store_cache
-        reset_vector_store_cache()
-
-    # 首次使用 BGE 需下载模型，提前提示避免用户误以为页面卡死
+    # BGE 模型加载较慢，选中时先预热并给出明确提示。
+    # 注意：get_embeddings / 向量库缓存均按后端名分键（tfidf/bge 实例可共存），
+    # 切换无需清缓存——模型加载过一次后来回切换即时生效，页面不再长时间变暗
     if selected_emb == "bge":
-        from rag_core import is_bge_model_cached
+        from rag_core import is_bge_model_cached, get_embeddings
         if not is_bge_model_cached():
-            st.info("⏳ 首次使用 BGE 需下载模型（约 100MB），期间页面会转圈，请耐心等待…")
+            st.info("⏳ 首次使用 BGE 需下载模型（约 100MB），请耐心等待…")
+        with st.spinner("正在加载 BGE 语义模型…"):
+            get_embeddings("bge")  # 命中缓存时瞬时返回，spinner 不可见
 
     st.divider()
 
