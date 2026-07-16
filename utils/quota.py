@@ -38,10 +38,11 @@ _EXEMPT_PROVIDERS = ("ollama",)
 
 def get_user_id() -> str:
     """
-    获取当前用户标识（三级回退）：
+    获取当前用户标识（四级回退）：
       1. st.context.headers 的 X-Forwarded-For 首段（Streamlit Cloud / 反代场景）
-      2. st.context.ip_address（Streamlit >= 1.45 直连场景）
-      3. 会话级 UUID（额度降级为会话级，刷新即重置）
+      2. st.context.ip_address（Streamlit >= 1.45 直连场景；localhost 为 None）
+      3. Host 请求头（本地 localhost 直连的稳定标识，避免刷新页面额度重置）
+      4. 会话级 UUID（额度降级为会话级，刷新即重置）
 
     IP 只存 sha256 前 16 位哈希，不落明文。
     """
@@ -60,6 +61,12 @@ def get_user_id() -> str:
                 # 仅接受字符串（测试环境下该属性可能是 Mock 对象）
                 if isinstance(addr, str):
                     ip = addr.strip()
+            if not ip and headers:
+                # 本地/直连场景拿不到客户端 IP：用 Host 头作稳定标识，
+                # 否则每次打开页面都会被当成新用户、额度重置
+                host = headers.get("Host", "")
+                if isinstance(host, str) and host:
+                    ip = "host:" + host
     except Exception:
         ip = ""
 
