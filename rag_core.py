@@ -151,7 +151,7 @@ def get_embeddings(backend: str = ""):
     Returns:
         LocalTFIDFEmbeddings 或 BGEEmbeddings 实例
     """
-    target = backend or EMBEDDING_BACKEND
+    target = backend or get_current_emb_backend()
 
     if target == "bge":
         bge = BGEEmbeddings()
@@ -244,6 +244,19 @@ def _get_cached_vectorstore(embedding_backend: str):
         return None
 
 
+def get_current_emb_backend() -> str:
+    """
+    获取当前会话选择的 Embedding 后端。
+    优先读侧边栏的会话级选择（config.EMBEDDING_BACKEND 是 import 时定死的，
+    切换后端必须走 session_state 才能生效），回退到 .env 配置。
+    """
+    try:
+        backend = st.session_state.get("sidebar_emb_backend")
+    except Exception:
+        backend = None
+    return backend or EMBEDDING_BACKEND
+
+
 def get_vector_store(embedding_backend: str = "") -> Optional[Chroma]:
     """
     获取或创建 Chroma 向量存储。
@@ -254,7 +267,7 @@ def get_vector_store(embedding_backend: str = "") -> Optional[Chroma]:
     Returns:
         Chroma 实例或 None
     """
-    target = embedding_backend or EMBEDDING_BACKEND
+    target = embedding_backend or get_current_emb_backend()
     return _get_cached_vectorstore(target)
 
 

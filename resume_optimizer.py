@@ -217,10 +217,11 @@ with st.sidebar:
         key="sidebar_llm_provider",
     )
     # 如果用户切换了后端，重置客户端缓存
-    if selected_provider != LLM_PROVIDER:
-        os.environ["LLM_PROVIDER"] = selected_provider
+    # 注意：不能与 config.LLM_PROVIDER 比较（import 时定死，永不变化，
+    # 会导致无限 rerun）；也无需手动 st.rerun()——selectbox 变化本身就会 rerun
+    if st.session_state.get("_last_llm_provider") != selected_provider:
+        st.session_state["_last_llm_provider"] = selected_provider
         reset_llm_client()
-        st.rerun()
 
     # ── API Key 状态 ──
     st.markdown("**🔑 API Key 状态**")
@@ -286,11 +287,13 @@ with st.sidebar:
         help="TF-IDF=纯离线 | BGE=中文语义（需首次下载约100MB）",
         key="sidebar_emb_backend",
     )
-    if selected_emb != EMBEDDING_BACKEND:
-        os.environ["EMBEDDING_BACKEND"] = selected_emb
+    # 如果用户切换了向量后端，清除向量库缓存
+    # 注意：不能与 config.EMBEDDING_BACKEND 比较（import 时定死，会无限 rerun）；
+    # 会话级选择由 rag_core 读取 session_state["sidebar_emb_backend"] 生效
+    if st.session_state.get("_last_emb_backend") != selected_emb:
+        st.session_state["_last_emb_backend"] = selected_emb
         from rag_core import reset_vector_store_cache
         reset_vector_store_cache()
-        st.rerun()
 
     st.divider()
 
