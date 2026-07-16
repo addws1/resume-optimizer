@@ -295,6 +295,12 @@ with st.sidebar:
         from rag_core import reset_vector_store_cache
         reset_vector_store_cache()
 
+    # 首次使用 BGE 需下载模型，提前提示避免用户误以为页面卡死
+    if selected_emb == "bge":
+        from rag_core import is_bge_model_cached
+        if not is_bge_model_cached():
+            st.info("⏳ 首次使用 BGE 需下载模型（约 100MB），期间页面会转圈，请耐心等待…")
+
     st.divider()
 
     # ── 可选信息（同步到 session_state）──

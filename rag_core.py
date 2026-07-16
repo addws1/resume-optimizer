@@ -136,6 +136,20 @@ class BGEEmbeddings:
         return self.embed_documents([text])[0]
 
 
+def is_bge_model_cached() -> bool:
+    """
+    检查 BGE 模型是否已下载到本机 HuggingFace 缓存。
+    用于切换到 BGE 时提示用户"首次需下载"，避免下载期间页面无响应被误认为卡死。
+    """
+    try:
+        from huggingface_hub.constants import HF_HUB_CACHE
+        cache_dir = Path(HF_HUB_CACHE)
+    except Exception:
+        cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    model_dir = cache_dir / ("models--" + BGE_MODEL_NAME.replace("/", "--"))
+    return model_dir.exists()
+
+
 # ══════════════════════════════════════════════════════════════
 # Embedding 工厂（带缓存）
 # ══════════════════════════════════════════════════════════════
