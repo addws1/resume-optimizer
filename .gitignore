@@ -52,3 +52,8 @@ desktop.ini
 models/
 *.bin
 *.safetensors
+
+# 评测材料中的第三方版权文件与作废数据
+docs/eval-materials/报告.pdf
+docs/eval-materials/报告_text.txt
+docs/eval-evidence/round1/
