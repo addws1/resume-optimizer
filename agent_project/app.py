@@ -436,11 +436,11 @@ def main():
 
     template_mode = st.radio(
         "选择模板模式",
-        options=["builtin", "custom", "none"],
+        options=["none", "builtin", "custom"],
         format_func=lambda x: {
-            "builtin": "📌 使用我的模板",
+            "none": "🚫 不用模板（保留原简历结构）— 推荐",
+            "builtin": "📌 使用内置模板（AI 产品实习生方向）",
             "custom": "📎 上传自定义模板",
-            "none": "🚫 不使用模板（保留原简历结构）",
         }[x],
         horizontal=True,
         key="template_mode",
