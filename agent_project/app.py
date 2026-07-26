@@ -83,6 +83,68 @@ def parse_result_sections(text: str) -> dict:
     return robust_parse_sections(text)
 
 
+def _looks_like_resume(text: str) -> bool:
+    """检查文本是否像一份简历（而非乱码/无效输入）。
+
+    检测多个维度的简历特征，满足任意 2 个即判定为像简历。
+    """
+    import re as _re
+    score = 0
+
+    # 1. 联系方式特征：手机号、邮箱
+    if _re.search(r'1[3-9]\d{9}', text):
+        score += 1
+    if _re.search(r'[\w.-]+@[\w.-]+\.\w+', text):
+        score += 1
+
+    # 2. 章节关键词（简历常见章节标题）
+    _section_keywords = ['教育', '经历', '项目', '技能', '专业', '实习',
+                         '工作', '求职', '证书', '语言', '自我评价', '联系方式',
+                         '电话', '邮箱', 'GitHub', '学历', '学校', '大学',
+                         'EDUCATION', 'EXPERIENCE', 'SKILLS', 'PROJECT']
+    found = sum(1 for kw in _section_keywords if kw.lower() in text.lower())
+    if found >= 3:
+        score += 1
+
+    # 3. 结构特征：有换行分段、有列表标记（- * • 1.）
+    lines = text.strip().split('\n')
+    if len(lines) >= 5:
+        score += 1
+    bullet_lines = sum(1 for l in lines if l.strip().startswith(('-', '*', '•')) or _re.match(r'^\d+[\.\、]', l.strip()))
+    if bullet_lines >= 2:
+        score += 1
+
+    # 4. 日期/时间特征（项目经历常见格式）
+    if _re.search(r'\d{4}[.\-/年]\d{1,2}', text):
+        score += 1
+
+    return score >= 2
+
+
+def _looks_like_valid_resume(text: str) -> bool:
+    """检查优化后的简历输出是否像一份有效简历。
+
+    防止 LLM 对乱码输入仍然强行生成虚假的"优化结果"。
+    """
+    import re as _re
+
+    if not text or len(text) < 100:
+        return False
+
+    # 必须包含至少一个常见简历章节标题
+    _section_patterns = [
+        r'#+\s*(求职|教育|项目|技能|专业|实习|工作|证书|自我评价|语言)',
+        r'#+\s*(EDUCATION|EXPERIENCE|SKILLS|PROJECT|CERTIFICATE)',
+    ]
+    has_section = any(
+        _re.search(p, text) for p in _section_patterns
+    )
+    if not has_section:
+        return False
+
+    return True
+
+
 def render_results(result: dict):
     """渲染四栏结果 + 自审痕迹 + 自评总结 + 评分卡 + 下载"""
     parsed = parse_result_sections(result["round2"])
@@ -135,8 +197,16 @@ def render_results(result: dict):
     clean_docx_path = st.session_state.get("clean_docx_path", "")
     if final_resume:
         st.divider()
-        st.markdown("### 📄 最终简历（可直接投递）")
-        st.caption("Agent 将优化后的条目按模板结构合成为完整简历，可直接复制使用或下载。")
+        is_valid = _looks_like_valid_resume(final_resume)
+        if is_valid:
+            st.markdown("### 📄 最终简历（可直接投递）")
+            st.caption("Agent 将优化后的条目按模板结构合成为完整简历，可直接复制使用或下载。")
+        else:
+            st.markdown("### 📄 最终简历")
+            st.warning(
+                "⚠️ 输出结果可能不完整——检测到输入文本缺乏简历特征。"
+                "请确认上传或粘贴的是完整的简历内容。"
+            )
         with st.expander("查看最终简历", expanded=True):
             st.markdown(final_resume)
             col_md, col_docx = st.columns(2)
@@ -560,7 +630,6 @@ def main():
             # ── 输入长度验证 ──
             # 有效简历至少需要一定长度（姓名 + 联系方式 + 教育背景 + 经历描述）
             MIN_RESUME_CHARS = 50
-            # 纯中文/纯数字/单字重复等明显无效输入也要拦住
             stripped = resume_text.strip()
             unique_chars = len(set(stripped.replace("\n", "").replace(" ", "")))
             if len(stripped) < MIN_RESUME_CHARS:
@@ -575,6 +644,12 @@ def main():
                     "⚠️ 输入内容无效（字符过于单一），请粘贴完整的简历文本。"
                 )
                 error_occurred = True
+            elif not _looks_like_resume(stripped):
+                # 长度和字符多样性都够，但没有简历特征——可能是乱码或非简历文本
+                st.warning(
+                    "⚠️ 输入文本看起来不像一份简历（未检测到联系方式、教育/项目/技能等常见简历特征）。"
+                    "如果是特殊格式的简历，可忽略此提示继续优化。"
+                )
 
         if not error_occurred and resume_text:
             # ── 额度检查 ──
