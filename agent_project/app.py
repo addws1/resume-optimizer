@@ -271,7 +271,9 @@ def render_results(result: dict):
 
 
 def render_step_status(status_widget, step: str, status: str):
-    """根据 Agent 进度回调更新 st.status 内的文字"""
+    """根据 Agent 进度回调更新 st.status 内的文字，带耗时信息"""
+    from time import perf_counter as _pc
+
     labels = {
         "optimize": "✍️ 正在优化（第 1 轮）…",
         "review": "🔍 Agent 正在自审…",
@@ -280,7 +282,28 @@ def render_step_status(status_widget, step: str, status: str):
         "synthesize": "📄 正在合成最终简历…",
     }
     icon = {"running": "⏳", "done": "✅", "error": "❌"}.get(status, "⏳")
-    status_widget.write(f"{icon} {labels.get(step, step)}")
+
+    # ── 计时：记录每步开始时间 + 显示总耗时 ──
+    import streamlit as st
+    step_timers = st.session_state.get("_agent_step_timers", {})
+    start_time = st.session_state.get("_agent_start_time", 0)
+
+    if status == "running":
+        step_timers[step] = _pc()
+        st.session_state["_agent_step_timers"] = step_timers
+
+    elapsed_str = ""
+    if start_time:
+        total_elapsed = _pc() - start_time
+        elapsed_str = f"（已耗时 {total_elapsed:.0f}s）"
+
+    step_elapsed_str = ""
+    if status == "done" and step in step_timers:
+        step_elapsed = _pc() - step_timers[step]
+        if step_elapsed >= 1:
+            step_elapsed_str = f" — {step_elapsed:.1f}s"
+
+    status_widget.write(f"{icon} {labels.get(step, step)}{step_elapsed_str} {elapsed_str}")
 
 
 def render_metrics_bar(metrics: dict):
@@ -684,6 +707,14 @@ def main():
 
         with st.status("🤖 Agent 正在优化你的简历…", expanded=True) as status:
             try:
+                # ── 计时起点 ──
+                from time import perf_counter as _pc
+                st.session_state["_agent_start_time"] = _pc()
+                st.session_state["_agent_step_timers"] = {}
+
+                # 预估耗时（5 步 LLM 调用，每步 8-25s，总计约 60-90s）
+                status.write("⏱️ 预计耗时 **60–90 秒**（5 步 Agent 闭环）")
+
                 agent = ResumeAgent(api_key=get_byok_key())
 
                 def on_progress(step, sts):
@@ -759,7 +790,9 @@ def main():
                 # ── 扣减免费额度（BYOK 用户不扣）──
                 consume_quota()
 
-                status.update(label="✅ 优化完成！", state="complete")
+                # 总耗时
+                total_elapsed = _pc() - st.session_state.get("_agent_start_time", _pc())
+                status.update(label=f"✅ 优化完成！（总耗时 {total_elapsed:.0f}s）", state="complete")
 
                 st.rerun()
 
