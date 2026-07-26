@@ -44,8 +44,12 @@ def _get_secret(name: str, default: str = "") -> str:
         return val
     try:
         import streamlit as st
-        return str(st.secrets.get(name, default))
-    except Exception:
+        return st.secrets[name]
+    except KeyError:
+        return default
+    except Exception as e:
+        import streamlit as st
+        st.error(f"读取 Secrets 失败（{name}）：{e}")
         return default
 
 
@@ -57,7 +61,7 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "deepseek")
 
 # DeepSeek 配置
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEEPSEEK_MODEL = "deepseek-chat"
+DEEPSEEK_MODEL = "deepseek-v4-pro"
 DEEPSEEK_MAX_TOKENS = 4096
 DEEPSEEK_TEMPERATURE = 0.7
 

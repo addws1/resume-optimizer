@@ -25,8 +25,15 @@ def _get_secret(name: str, default: str = "") -> str:
         return val
     try:
         import streamlit as st
-        return str(st.secrets.get(name, default))
-    except Exception:
+        # 直接用 [] 访问，KeyError 明确表示未配置；
+        # 不用 .get() 避免静默返回空串
+        return st.secrets[name]
+    except KeyError:
+        return default
+    except Exception as e:
+        # 其他异常（如 secrets.toml 格式错误）用醒目的方式暴露
+        import streamlit as st
+        st.error(f"读取 Secrets 失败（{name}）：{e}")
         return default
 
 
