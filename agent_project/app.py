@@ -20,7 +20,7 @@ _env_path = Path(__file__).parent / ".env"
 load_dotenv(_env_path)
 
 from config import MAX_FILE_SIZE_MB, ALLOWED_EXTENSIONS, FREE_QUOTA_PER_DAY
-from parser import parse_resume_file, ParseError
+from parser import parse_resume_file, ParseError, read_text_with_encoding_fallback
 from section_parser import parse_sections as robust_parse_sections
 from docx_gen import generate_docx, generate_clean_resume_docx
 from agent import ResumeAgent, AgentError
@@ -94,6 +94,11 @@ def render_results(result: dict):
 
     # ── 评分卡（放在最前面，用户先看分数再深入细节）──
     render_score_card(scores, score_raw)
+
+    # ── LLM 调用指标 ──
+    metrics = result.get("metrics", {})
+    if metrics:
+        render_metrics_bar(metrics)
 
     # ── 原始简历（可折叠）──
     original_text = st.session_state.get("_saved_resume_text", "")
@@ -206,6 +211,31 @@ def render_step_status(status_widget, step: str, status: str):
     }
     icon = {"running": "⏳", "done": "✅", "error": "❌"}.get(status, "⏳")
     status_widget.write(f"{icon} {labels.get(step, step)}")
+
+
+def render_metrics_bar(metrics: dict):
+    """渲染 LLM 调用指标概览条（轻量，不抢眼）"""
+    calls = metrics.get("calls", 0)
+    total_tokens = metrics.get("total_tokens", 0)
+    elapsed = metrics.get("elapsed_seconds", 0)
+    cost_rmb = metrics.get("cost_rmb", 0)
+
+    # 格式化
+    if total_tokens >= 1000:
+        token_str = f"{total_tokens / 1000:.1f}K"
+    else:
+        token_str = str(total_tokens)
+
+    st.markdown(f"""
+    <div style="display:flex; gap:1.5rem; align-items:center; padding:0.5rem 1rem;
+                border-radius:8px; background:#f0f4ff; border:1px solid #d0d8f0;
+                font-size:0.8rem; color:#555; margin-bottom:1rem;">
+        <span>🔢 <b>{calls}</b> 次 LLM 调用</span>
+        <span>🪙 <b>{token_str}</b> tokens</span>
+        <span>⏱ <b>{elapsed:.1f}s</b></span>
+        <span>💰 ¥<b>{cost_rmb:.4f}</b></span>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def _score_color(score: int) -> str:
@@ -433,7 +463,7 @@ def main():
                         p.text for p in doc.paragraphs if p.text.strip()
                     )
                 else:
-                    custom_template_text = custom_template_file.read().decode("utf-8")
+                    custom_template_text = read_text_with_encoding_fallback(custom_template_file.read())
                 st.info(f"✅ 已读取模板（{len(custom_template_text)} 字符）")
             except Exception as e:
                 st.warning(f"⚠️ 模板解析失败：{e}")
@@ -621,6 +651,7 @@ def main():
                     "target_role": st.session_state.get("_saved_target_role", "") or "未指定",
                     "target_company": st.session_state.get("_saved_target_company", "") or "",
                     "scores": result.get("scores", {}),
+                    "metrics": result.get("metrics", {}),
                     "round2": result.get("round2", ""),
                     "final_resume": result.get("final_resume", ""),
                     "assessment": result.get("assessment", ""),

@@ -11,6 +11,8 @@
 =============================================================================
 """
 
+from dataclasses import dataclass
+from time import perf_counter
 import re
 
 from openai import OpenAI
@@ -18,6 +20,7 @@ from openai import OpenAI
 from config import (
     DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, _get_api_key,
     LLM_TEMPERATURE, LLM_MAX_TOKENS, REVIEW_MAX_TOKENS, ASSESS_MAX_TOKENS,
+    LLM_PRICE_INPUT, LLM_PRICE_OUTPUT,
 )
 from prompts import (
     build_optimize_prompt,
@@ -28,7 +31,7 @@ from prompts import (
     build_followup_prompt,
     build_interview_questions_prompt,
 )
-from logger import log_prompt, log_response, log_error as log_llm_error
+from logger import log_prompt, log_response, log_error as log_llm_error, log_metrics
 
 
 # ══════════════════════════════════════════════════════════════
@@ -41,6 +44,21 @@ class AgentError(Exception):
         super().__init__(message)
         self.step = step       # 哪个步骤出错
         self.user_msg = user_msg  # 给用户看的友好提示
+
+
+# ══════════════════════════════════════════════════════════════
+# 调用指标
+# ══════════════════════════════════════════════════════════════
+
+@dataclass
+class CallMetrics:
+    """单次 LLM 调用的指标"""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    reasoning_tokens: int = 0
+    total_tokens: int = 0
+    elapsed_seconds: float = 0.0
+    cost_usd: float = 0.0
 
 
 # ══════════════════════════════════════════════════════════════
@@ -64,6 +82,7 @@ class LLMClient:
             api_key=key,
             base_url=DEEPSEEK_BASE_URL,
         )
+        self._call_history: list[CallMetrics] = []
 
     @staticmethod
     def _ensure_format(text: str) -> str:
@@ -86,6 +105,14 @@ class LLMClient:
             )
 
         return text
+
+    @staticmethod
+    def _calc_cost(prompt_tokens: int, completion_tokens: int) -> float:
+        """计算单次调用成本（USD）"""
+        return (
+            prompt_tokens / 1_000_000 * LLM_PRICE_INPUT +
+            completion_tokens / 1_000_000 * LLM_PRICE_OUTPUT
+        )
 
     def generate(
         self,
@@ -118,15 +145,52 @@ class LLMClient:
             # 记录请求日志
             log_prompt("llm", f"model={DEEPSEEK_MODEL} max_tokens={max_tokens}\n\n{prompt[:5000]}")
 
+            t0 = perf_counter()
             response = self._client.chat.completions.create(
                 model=DEEPSEEK_MODEL,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+            elapsed = perf_counter() - t0
+
             content = response.choices[0].message.content or ""
             # 自动修复缺失的 ### 标题前缀
             content = self._ensure_format(content)
+
+            # ── 收集 token 指标 ──
+            usage = response.usage
+            if usage:
+                prompt_tokens = usage.prompt_tokens or 0
+                completion_tokens = usage.completion_tokens or 0
+                total_tokens = usage.total_tokens or 0
+
+                # reasoning tokens（DeepSeek v4 推理模型专有字段）
+                reasoning = 0
+                try:
+                    details = getattr(usage, "completion_tokens_details", None)
+                    if details is not None:
+                        reasoning = getattr(details, "reasoning_tokens", 0) or 0
+                except Exception:
+                    pass
+
+                m = CallMetrics(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    reasoning_tokens=reasoning,
+                    total_tokens=total_tokens,
+                    elapsed_seconds=round(elapsed, 2),
+                    cost_usd=round(self._calc_cost(prompt_tokens, completion_tokens), 6),
+                )
+                self._call_history.append(m)
+                log_metrics("llm", {
+                    "prompt_tokens": m.prompt_tokens,
+                    "completion_tokens": m.completion_tokens,
+                    "reasoning_tokens": m.reasoning_tokens,
+                    "total_tokens": m.total_tokens,
+                    "elapsed_seconds": m.elapsed_seconds,
+                    "cost_usd": m.cost_usd,
+                })
 
             # 记录响应日志
             log_response("llm", content[:5000])
@@ -152,6 +216,28 @@ class LLMClient:
                 user_msg = f"⚠️ LLM 调用失败，请重试。（{err_text[:100]}）"
 
             raise AgentError("llm_call", err_text[:200], user_msg)
+
+
+    def get_metrics(self) -> dict:
+        """返回聚合指标：总调用次数、token 分布、总耗时、总成本"""
+        if not self._call_history:
+            return {}
+        total_prompt = sum(m.prompt_tokens for m in self._call_history)
+        total_completion = sum(m.completion_tokens for m in self._call_history)
+        total_reasoning = sum(m.reasoning_tokens for m in self._call_history)
+        total_tokens = sum(m.total_tokens for m in self._call_history)
+        total_elapsed = sum(m.elapsed_seconds for m in self._call_history)
+        total_cost = sum(m.cost_usd for m in self._call_history)
+        return {
+            "calls": len(self._call_history),
+            "prompt_tokens": total_prompt,
+            "completion_tokens": total_completion,
+            "reasoning_tokens": total_reasoning,
+            "total_tokens": total_tokens,
+            "elapsed_seconds": round(total_elapsed, 1),
+            "cost_usd": round(total_cost, 6),
+            "cost_rmb": round(total_cost * 7.2, 4),  # 近似汇率
+        }
 
 
 # ══════════════════════════════════════════════════════════════
@@ -289,6 +375,7 @@ class ResumeAgent:
             "final_resume": self.final_resume,
             "scores": scores,
             "score_raw": raw_assessment,
+            "metrics": self.llm.get_metrics(),
         }
 
     def followup(self, user_feedback: str, original_text: str, current_output: str = "", template_mode: str = "builtin", custom_template: str = "", jd_text: str = "") -> dict:
@@ -334,6 +421,7 @@ class ResumeAgent:
             "final_resume": final_resume,
             "scores": {},
             "score_raw": "",
+            "metrics": self.llm.get_metrics(),
         }
 
     def generate_questions(self, resume_text: str, jd_text: str = "") -> str:

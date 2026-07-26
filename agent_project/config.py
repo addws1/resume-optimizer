@@ -58,6 +58,11 @@ LLM_MAX_TOKENS = 8192       # 四栏输出 + 模板 + 反造假规则，需要�
 REVIEW_MAX_TOKENS = 2048    # 自审输出较短
 ASSESS_MAX_TOKENS = 2048   # 自评总结 + 多维度评分
 
+# ── LLM 定价（USD / 1M tokens，DeepSeek v4-pro）──
+LLM_PRICE_INPUT = 1.10       # 输入价格（cache miss）
+LLM_PRICE_OUTPUT = 4.40      # 输出价格（含 reasoning tokens）
+# 说明：reasoning tokens 按输出价格计费，DeekSeek 不单独对推理 token 收费
+
 # ── 免费额度 / BYOK ──
 FREE_QUOTA_PER_DAY = 10     # 每 IP 每天免费优化次数
 QUOTA_FILE = DATA_DIR / "usage_quotas.json"

@@ -1,92 +1,110 @@
 """
 =============================================================================
-简历优化 Agent · 日志模块
+简历优化 Agent · 日志模块（v2.1）
 =============================================================================
-记录每次 LLM 调用的 prompt 和 response，方便排查优化效果问题。
+Python logging + RotatingFileHandler，取代旧的手写文件写入方案。
 
-日志位置：agent_project/logs/
-格式：纯文本，按 session 分文件，自动清理超过 20 个的旧 session。
+特性：
+  - RotatingFileHandler 自动轮转（5MB × 5 备份），不再需要手动清理
+  - 标准日志级别：DEBUG / INFO / WARNING / ERROR
+  - 完整 traceback 支持（logger.exception 自动记录堆栈）
+  - API Key 自动脱敏
+  - 同时输出到控制台（Streamlit Cloud 可见）
+  - 保持旧 API 兼容：log_prompt / log_response / log_error / current_log_path
 =============================================================================
 """
 
-import os
+import logging
 import re
-from datetime import datetime
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# ── 日志目录 ──
+# ── 路径 & 参数 ──
 LOG_DIR = Path(__file__).parent / "logs"
+LOG_FILE = LOG_DIR / "agent.log"
+LOG_MAX_BYTES = 5 * 1024 * 1024   # 5MB 触发轮转
+LOG_BACKUP_COUNT = 5               # 保留 5 个备份
 
-# 最多保留的 session 数
-MAX_SESSIONS = 20
+# ── 构建 logger ──
+_logger = logging.getLogger("resume_agent")
+_logger.setLevel(logging.DEBUG)
 
-# ── 当前 session ──
-_session_id: str | None = None
+# 避免 Streamlit 的 rerun 导致重复添加 handler
+if not _logger.handlers:
+    LOG_DIR.mkdir(exist_ok=True)
+
+    # ── 文件 handler（UTF-8，自动轮转）──
+    fh = RotatingFileHandler(
+        str(LOG_FILE),
+        maxBytes=LOG_MAX_BYTES,
+        backupCount=LOG_BACKUP_COUNT,
+        encoding="utf-8",
+    )
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(logging.Formatter(
+        "%(asctime)s | %(levelname)-7s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    ))
+    _logger.addHandler(fh)
+
+    # ── 控制台 handler（仅 WARNING+，避免刷屏）──
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.WARNING)
+    ch.setFormatter(logging.Formatter(
+        "%(levelname)s | %(message)s"
+    ))
+    _logger.addHandler(ch)
 
 
-def _init_session() -> str:
-    """初始化当前 session，返回 session_id"""
-    global _session_id
-    if _session_id is None:
-        _session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        LOG_DIR.mkdir(exist_ok=True)
-        _cleanup_old_sessions()
-    return _session_id
-
-
-def _cleanup_old_sessions():
-    """保留最近 MAX_SESSIONS 个 session，删除更早的"""
-    try:
-        files = sorted(LOG_DIR.glob("session_*.log"), key=os.path.getmtime, reverse=True)
-        for f in files[MAX_SESSIONS:]:
-            f.unlink(missing_ok=True)
-    except Exception:
-        pass
-
-
-def _session_path() -> Path:
-    """获取当前 session 的日志文件路径"""
-    return LOG_DIR / f"session_{_init_session()}.log"
-
+# ══════════════════════════════════════════════════════════════
+# API Key 脱敏
+# ══════════════════════════════════════════════════════════════
 
 def _mask_api_key(text: str) -> str:
-    """遮蔽 API Key，防止日志泄露"""
-    # 匹配 sk- 开头的 key 模式
+    """遮蔽 sk- 开头的 API Key"""
     return re.sub(r'sk-[a-zA-Z0-9]{20,}', 'sk-***MASKED***', text)
 
 
-def _write(header: str, content: str):
-    """追加一条日志记录"""
-    path = _session_path()
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    safe_content = _mask_api_key(content)
-    # 截断过长内容
-    if len(safe_content) > 8000:
-        safe_content = safe_content[:8000] + "\n\n... [截断，完整内容过长]"
+def _truncate(text: str, max_len: int = 4000) -> str:
+    """截断过长内容，超出部分标注"""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + f"\n\n... [截断 {len(text) - max_len} 字符]"
 
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(f"\n{'═' * 60}\n")
-        f.write(f"  {header}  |  {timestamp}\n")
-        f.write(f"{'═' * 60}\n")
-        f.write(safe_content)
-        f.write(f"\n{'─' * 60}\n")
 
+# ══════════════════════════════════════════════════════════════
+# 公开 API（保持旧接口兼容）
+# ══════════════════════════════════════════════════════════════
 
 def log_prompt(step: str, prompt: str):
     """记录发送给 LLM 的 prompt"""
-    _write(f"📤 PROMPT [{step}]", prompt)
+    safe = _mask_api_key(prompt)
+    _logger.info(f"[PROMPT {step}]\n{_truncate(safe)}")
 
 
 def log_response(step: str, response: str):
     """记录 LLM 返回的 response"""
-    _write(f"📥 RESPONSE [{step}]", response)
+    _logger.info(f"[RESPONSE {step}]\n{_truncate(response)}")
 
 
 def log_error(step: str, error: str):
-    """记录调用异常"""
-    _write(f"❌ ERROR [{step}]", error)
+    """记录调用异常（含完整 traceback）"""
+    _logger.error(f"[ERROR {step}] {error[:1000]}", exc_info=True)
+
+
+def log_metrics(step: str, metrics: dict):
+    """记录 LLM 调用指标：token 分布、耗时、成本"""
+    _logger.info(
+        f"[METRICS {step}] "
+        f"in={metrics.get('prompt_tokens', 0)} "
+        f"out={metrics.get('completion_tokens', 0)} "
+        f"reason={metrics.get('reasoning_tokens', 0)} "
+        f"total={metrics.get('total_tokens', 0)} "
+        f"time={metrics.get('elapsed_seconds', 0):.1f}s "
+        f"cost=${metrics.get('cost_usd', 0):.6f}"
+    )
 
 
 def current_log_path() -> str:
-    """返回当前日志文件路径，供 UI 展示"""
-    return str(_session_path())
+    """返回当前日志文件路径"""
+    return str(LOG_FILE)
