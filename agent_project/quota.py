@@ -51,17 +51,26 @@ def _write_json(filepath: Path, data: dict):
 
 def get_user_id() -> str:
     """
-    获取当前用户标识（多级回退）：
+    获取当前用户标识（多级回退，首次计算后缓存）：
       1. st.context.headers 的 X-Forwarded-For 首段（Streamlit Cloud / 反代）
       2. st.context.ip_address（直连场景）
       3. X-Real-IP 请求头（部分反代使用）
-      4. Host + User-Agent 组合哈希（比纯 Host 更稳定）
-      5. 浏览器 Cookie 持久化标识（跨会话保持，避免刷新重置）
-      6. 会话级 UUID（最终降级，仅本次会话有效）
+      4. Host + User-Agent 组合哈希
+      5. 会话级持久 ID（最终降级）
+
+    重要：首次成功计算后存入 session_state，后续调用直接返回缓存值。
+    这解决了 st.rerun() 多次执行时 st.context 状态不一致导致 ID 变化、
+    进而导致额度"重置"的问题。
 
     IP 只存 sha256 前 16 位哈希，不落明文。
     """
     import streamlit as st
+
+    # ── 缓存：一旦确定用户 ID，本次会话内不再变化 ──
+    cache_key = "_quota_user_id_cached"
+    cached = st.session_state.get(cache_key)
+    if cached:
+        return cached
 
     ip = ""
     try:
@@ -80,32 +89,28 @@ def get_user_id() -> str:
                 addr = getattr(st.context, "ip_address", None)
                 if isinstance(addr, str) and addr:
                     ip = addr.strip()
-            # Host + User-Agent 组合：比纯 Host 更稳定（同设备同浏览器不随标签页变化）
+            # Host + User-Agent 组合
             if not ip and headers:
                 host = headers.get("Host", "")
                 ua = headers.get("User-Agent", "")
                 if isinstance(host, str) and host:
                     ip = "host:" + host
                     if isinstance(ua, str) and ua:
-                        ip += "|ua:" + ua[:80]  # 截断过长的 UA
+                        ip += "|ua:" + ua[:80]
     except Exception:
         ip = ""
 
     if ip:
-        return "ip:" + hashlib.sha256(ip.encode("utf-8")).hexdigest()[:16]
+        user_id = "ip:" + hashlib.sha256(ip.encode("utf-8")).hexdigest()[:16]
+    else:
+        # 回退：会话级持久 ID
+        if not st.session_state.get("_quota_persistent_id"):
+            st.session_state["_quota_persistent_id"] = "persist:" + uuid.uuid4().hex[:16]
+        user_id = st.session_state["_quota_persistent_id"]
 
-    # ── Cookie 持久化回退（跨会话保持，避免浏览器关闭后额度重置）──
-    # Streamlit 没有原生 cookie API，用 session_state 模拟一个稳定的浏览器指纹
-    # 策略：如果前面 IP 没取到（本地开发常见），生成一个持久化标识存入
-    # session_state，并在本次应用生命周期内保持不变。
-    # 注意：Streamlit Cloud 上每次请求可能路由到不同容器，cookie 方案
-    # 也有局限，但相比纯会话 UUID 已有明显改善（同容器内跨刷新保持）。
-    if not st.session_state.get("_quota_persistent_id"):
-        # 生成新标识：随机 UUID，本次应用生命周期内保持不变
-        st.session_state["_quota_persistent_id"] = (
-            "persist:" + uuid.uuid4().hex[:16]
-        )
-    return st.session_state["_quota_persistent_id"]
+    # 缓存供本次会话后续调用使用
+    st.session_state[cache_key] = user_id
+    return user_id
 
 
 # ══════════════════════════════════════════════════════════════
