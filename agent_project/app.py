@@ -439,7 +439,7 @@ def main():
         options=["none", "builtin", "custom"],
         format_func=lambda x: {
             "none": "🚫 不用模板（保留原简历结构）— 推荐",
-            "builtin": "📌 使用内置模板（AI 产品实习生方向）",
+            "builtin": "📌 使用内置模板（通用格式参考）",
             "custom": "📎 上传自定义模板",
         }[x],
         horizontal=True,
