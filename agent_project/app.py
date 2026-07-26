@@ -557,6 +557,26 @@ def main():
             error_occurred = True
 
         if not error_occurred and resume_text:
+            # ── 输入长度验证 ──
+            # 有效简历至少需要一定长度（姓名 + 联系方式 + 教育背景 + 经历描述）
+            MIN_RESUME_CHARS = 50
+            # 纯中文/纯数字/单字重复等明显无效输入也要拦住
+            stripped = resume_text.strip()
+            unique_chars = len(set(stripped.replace("\n", "").replace(" ", "")))
+            if len(stripped) < MIN_RESUME_CHARS:
+                st.error(
+                    f"⚠️ 输入内容过短（{len(stripped)} 字符），不像一份完整的简历。"
+                    f"请粘贴完整的简历文本（至少 {MIN_RESUME_CHARS} 字符）。"
+                )
+                error_occurred = True
+            elif unique_chars < 5:
+                # 去重后字符数极少 = 明显是乱输入（如 "1111111"）
+                st.error(
+                    "⚠️ 输入内容无效（字符过于单一），请粘贴完整的简历文本。"
+                )
+                error_occurred = True
+
+        if not error_occurred and resume_text:
             # ── 额度检查 ──
             allowed, quota_msg = check_quota()
             if not allowed:
