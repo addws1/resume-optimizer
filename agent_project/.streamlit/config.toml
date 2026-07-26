@@ -1,0 +1,13 @@
+# 简历优化 Agent · Streamlit 配置
+# 本地运行用 .env，Streamlit Cloud 用 Secrets。
+
+[theme]
+base = "light"
+primaryColor = "#1a56db"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f6f8fa"
+textColor = "#1e293b"
+
+[server]
+# 禁止自动重载（避免 Python 字节码缓存导致配置不生效的问题）
+runOnSave = false
