@@ -40,7 +40,9 @@ def _get_secret(name: str, default: str = "") -> str:
 # ── 路径 ──
 PROJECT_DIR = Path(__file__).parent
 OUTPUT_DIR = PROJECT_DIR / "output"
+DATA_DIR = PROJECT_DIR / "data"
 OUTPUT_DIR.mkdir(exist_ok=True)
+DATA_DIR.mkdir(exist_ok=True)
 
 # ── DeepSeek API ──
 # 延迟读取：不在模块导入时求值，避免 Streamlit Cloud 上 st.secrets 尚未初始化
@@ -55,6 +57,10 @@ LLM_TEMPERATURE = 0.3       # 简历优化需要一致性，不宜过高
 LLM_MAX_TOKENS = 8192       # 四栏输出 + 模板 + 反造假规则，需要足够空间
 REVIEW_MAX_TOKENS = 2048    # 自审输出较短
 ASSESS_MAX_TOKENS = 2048   # 自评总结 + 多维度评分
+
+# ── 免费额度 / BYOK ──
+FREE_QUOTA_PER_DAY = 10     # 每 IP 每天免费优化次数
+QUOTA_FILE = DATA_DIR / "usage_quotas.json"
 
 # ── 文件上传 ──
 MAX_FILE_SIZE_MB = 10

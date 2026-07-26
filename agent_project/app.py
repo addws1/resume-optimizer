@@ -19,11 +19,15 @@ from dotenv import load_dotenv
 _env_path = Path(__file__).parent / ".env"
 load_dotenv(_env_path)
 
-from config import MAX_FILE_SIZE_MB, ALLOWED_EXTENSIONS
+from config import MAX_FILE_SIZE_MB, ALLOWED_EXTENSIONS, FREE_QUOTA_PER_DAY
 from parser import parse_resume_file, ParseError
 from section_parser import parse_sections as robust_parse_sections
 from docx_gen import generate_docx, generate_clean_resume_docx
 from agent import ResumeAgent, AgentError
+from quota import (
+    get_user_id, get_remaining, get_byok_key, is_quota_exempt,
+    check_quota, consume_quota,
+)
 
 # ── 页面配置 ──
 st.set_page_config(
@@ -435,6 +439,34 @@ def main():
                 st.warning(f"⚠️ 模板解析失败：{e}")
 
     # ════════════════════════════════════════════════════════
+    # 额度 & BYOK
+    # ════════════════════════════════════════════════════════
+
+    st.divider()
+    st.markdown("### 💰 免费额度")
+
+    if is_quota_exempt():
+        st.success("🔑 已使用您自己的 API Key，不限次数")
+    else:
+        user_id = get_user_id()
+        remaining = get_remaining(user_id)
+        col_q1, col_q2 = st.columns([2, 1])
+        with col_q1:
+            if remaining > 0:
+                st.info(f"🎫 今日剩余免费次数：**{remaining} / {FREE_QUOTA_PER_DAY}**")
+            else:
+                st.error(f"⚠️ 今日免费次数已用完（{FREE_QUOTA_PER_DAY} 次/天）")
+        with col_q2:
+            st.text_input(
+                "🔐 使用自己的 API Key（可选）",
+                type="password",
+                key="_byok_api_key",
+                placeholder="sk-...",
+                help="填入后不限次数。Key 仅存当前会话内存，刷新页面即失效，永不写入磁盘或日志。",
+                label_visibility="collapsed",
+            )
+
+    # ════════════════════════════════════════════════════════
     # 操作按钮
     # ════════════════════════════════════════════════════════
 
@@ -495,6 +527,13 @@ def main():
             error_occurred = True
 
         if not error_occurred and resume_text:
+            # ── 额度检查 ──
+            allowed, quota_msg = check_quota()
+            if not allowed:
+                st.error(quota_msg)
+                error_occurred = True
+
+        if not error_occurred and resume_text:
             # 保存到 session_state 供后续步骤使用（用 _saved_ 前缀避免与 widget key 冲突）
             st.session_state._saved_resume_text = resume_text
             st.session_state._saved_target_role = target_role
@@ -520,7 +559,7 @@ def main():
 
         with st.status("🤖 Agent 正在优化你的简历…", expanded=True) as status:
             try:
-                agent = ResumeAgent()
+                agent = ResumeAgent(api_key=get_byok_key())
 
                 def on_progress(step, sts):
                     render_step_status(status, step, sts)
@@ -590,6 +629,9 @@ def main():
                     "clean_docx_path": clean_docx_path,
                 })
                 st.session_state._optimization_history = history
+
+                # ── 扣减免费额度（BYOK 用户不扣）──
+                consume_quota()
 
                 status.update(label="✅ 优化完成！", state="complete")
 
@@ -684,7 +726,7 @@ def main():
         if followup_clicked and feedback.strip():
             with st.spinner("🔧 Agent 正在调整…"):
                 try:
-                    agent = ResumeAgent()
+                    agent = ResumeAgent(api_key=get_byok_key())
                     # 使用 _saved_round2_output 作为当前版本（支持多轮迭代）
                     current_output = st.session_state.get("_saved_round2_output", result.get("round2", ""))
                     new_result = agent.followup(
@@ -749,7 +791,7 @@ def main():
         if gen_clicked:
             with st.spinner("🤔 面试官正在出题…"):
                 try:
-                    agent = ResumeAgent()
+                    agent = ResumeAgent(api_key=get_byok_key())
                     final_resume = result.get("final_resume", "")
                     resume_to_use = final_resume or result.get("round2", "")
                     questions = agent.generate_questions(

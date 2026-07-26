@@ -50,16 +50,18 @@ class AgentError(Exception):
 class LLMClient:
     """DeepSeek LLM 客户端（MVP 只接 DeepSeek）"""
 
-    def __init__(self):
-        api_key = _get_api_key()
-        if not api_key:
+    def __init__(self, api_key: str = ""):
+        # 优先使用调用方传入的 key（BYOK），回退到 .env / Secrets 配置
+        key = api_key or _get_api_key()
+        if not key:
             raise AgentError(
                 "init",
                 "未找到 DEEPSEEK_API_KEY",
-                "❌ 未配置 API Key，请在 .env 文件中设置 DEEPSEEK_API_KEY。"
+                "❌ 未配置 API Key，请在 .env 文件中设置 DEEPSEEK_API_KEY，"
+                "或在界面填入您自己的 API Key。"
             )
         self._client = OpenAI(
-            api_key=api_key,
+            api_key=key,
             base_url=DEEPSEEK_BASE_URL,
         )
 
@@ -168,8 +170,8 @@ class ResumeAgent:
       5. 合成干净简历（将优化条目按模板结构合成为可投递简历）
     """
 
-    def __init__(self):
-        self.llm = LLMClient()
+    def __init__(self, api_key: str = ""):
+        self.llm = LLMClient(api_key=api_key)
         self.round1_output: str = ""   # 第 1 轮优化结果
         self.review_findings: str = "" # 自审发现
         self.round2_output: str = ""   # 第 2 轮改进结果
