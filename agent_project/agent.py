@@ -16,7 +16,7 @@ import re
 from openai import OpenAI
 
 from config import (
-    DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL,
+    DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, _get_api_key,
     LLM_TEMPERATURE, LLM_MAX_TOKENS, REVIEW_MAX_TOKENS, ASSESS_MAX_TOKENS,
 )
 from prompts import (
@@ -51,14 +51,15 @@ class LLMClient:
     """DeepSeek LLM 客户端（MVP 只接 DeepSeek）"""
 
     def __init__(self):
-        if not DEEPSEEK_API_KEY:
+        api_key = _get_api_key()
+        if not api_key:
             raise AgentError(
                 "init",
                 "未找到 DEEPSEEK_API_KEY",
                 "❌ 未配置 API Key，请在 .env 文件中设置 DEEPSEEK_API_KEY。"
             )
         self._client = OpenAI(
-            api_key=DEEPSEEK_API_KEY,
+            api_key=api_key,
             base_url=DEEPSEEK_BASE_URL,
         )
 

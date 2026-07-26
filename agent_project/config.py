@@ -36,7 +36,10 @@ OUTPUT_DIR = PROJECT_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 # ── DeepSeek API ──
-DEEPSEEK_API_KEY = _get_secret("DEEPSEEK_API_KEY")
+# 延迟读取：不在模块导入时求值，避免 Streamlit Cloud 上 st.secrets 尚未初始化
+def _get_api_key() -> str:
+    return _get_secret("DEEPSEEK_API_KEY")
+
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-v4-pro"   # DeepSeek 2026 最新模型名
 
