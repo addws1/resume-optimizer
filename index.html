@@ -251,7 +251,6 @@ const Store = {
 function dt(d){if(!d)d=new Date();else if(typeof d==='string')d=new Date(d+'T00:00:00');return d.toISOString().slice(0,10)}
 function fmt(d){const y=d.getFullYear(),m=d.getMonth()+1;return `${y}年 ${m}月`}
 function fmtWeekRange(d){const start=monOf(d),end=new Date(start);end.setDate(end.getDate()+6);const sm=start.getMonth()+1,sd=start.getDate(),em=end.getMonth()+1,ed=end.getDate();if(sm===em)return `${sm}月${sd}日 - ${ed}日`;return `${sm}月${sd}日 - ${em}月${ed}日`}
-function monOf(d){const r=new Date(d);r.setDate(1);return r}
 function monOf(d){const r=new Date(d);r.setDate(1);r.setHours(0,0,0,0);return r}
 function pad(n){return String(n).padStart(2,'0')}
 function daysInMonth(y,m){return new Date(y,m,0).getDate()}
